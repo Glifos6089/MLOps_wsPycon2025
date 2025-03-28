@@ -8,7 +8,20 @@ run = wandb.init(project="Prueba-Clustering-Diplomado")
 
 artifact = run.use_artifact('rgarzona-universidad-nacional-de-colombia/Prueba-Clustering-Diplomado/iris_preprocesado:v0', type='dataset')
 artifact_dir = artifact.download()
-data_preprocesada = pd.read_csv(artifact_dir)
+
+# Construye la ruta al archivo de datos dentro del artefacto descargado
+# Suponiendo que el archivo dentro del artefacto se llama 'preprocessed_data.csv'
+ruta_archivo = f"{artifact_dir}/preprocessed_data.csv"
+
+# Lee el archivo CSV en un DataFrame de pandas
+try:
+    data_preprocesada = pd.read_csv(ruta_archivo)
+    print("Datos preprocesados cargados exitosamente en el DataFrame:")
+    print(df_preprocesado.head())
+except FileNotFoundError:
+    print(f"Error: No se encontró el archivo 'preprocessed_data.csv' en la ruta: {ruta_archivo}")
+    print(f"Asegúrate de que el artefacto '{artifact.name}:{artifact.version}' contenga este archivo.")
+
 
 wandb.init(project="Prueba-Clustering-Diplomado")
 
