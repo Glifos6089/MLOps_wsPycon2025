@@ -17,7 +17,7 @@ ruta_archivo = f"{artifact_dir}/preprocessed_data.csv.table.json"
 try:
     data_preprocesada = pd.read_csv(ruta_archivo)
     print("Datos preprocesados cargados exitosamente en el DataFrame:")
-    print(df_preprocesado.head())
+    print(data_preprocesada.head())
 except FileNotFoundError:
     print(f"Error: No se encontró el archivo 'preprocessed_data.csv' en la ruta: {ruta_archivo}")
     print(f"Asegúrate de que el artefacto '{artifact.name}:{artifact.version}' contenga este archivo.")
