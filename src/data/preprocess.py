@@ -4,17 +4,14 @@ from sklearn.model_selection import train_test_split
 import wandb
 
 # Inicializar WandB (asegúrate de que el nombre del proyecto coincida) lol
+run = wandb.init(project="Prueba-Clustering-Diplomado")
+
+artifact = run.use_artifact('rgarzona-universidad-nacional-de-colombia/Prueba-Clustering-Diplomado/iris_preprocesado:v0', type='dataset')
+artifact_dir = artifact.download()
+data_preprocesada = pd.read_csv(ruta_archivo)
+
 wandb.init(project="Prueba-Clustering-Diplomado")
 
-# Nombre y tipo del artefacto que queremos cargar
-nombre_artefacto_preprocesado = "iris_preprocesado"
-tipo_artefacto_preprocesado = "dataset"
-version_artefacto = "latest"
-nombre_completo_artefacto = f"{nombre_artefacto_preprocesado}:{version_artefacto}"
-artefacto = wandb.use_artifact(nombre_completo_artefacto, type=tipo_artefacto_preprocesado)
-artefacto_descargado = artefacto.download()
-ruta_archivo = f"{artefacto_descargado}/preprocessed_data.csv"
-data_preprocesada = pd.read_csv(ruta_archivo)
 X_prep = data_preprocesada
 iris = load_iris(as_frame=True)
 y_original = iris.target
