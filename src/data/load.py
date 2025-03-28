@@ -1,62 +1,52 @@
-import torch
-import torchvision
-from torch.utils.data import TensorDataset
-# Testing lol
-import argparse
+import pandas as pd
+from sklearn.datasets import load_iris
+from sklearn.model_selection import train_test_split
 import wandb
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--IdExecution', type=str, help='ID of the execution')
-args = parser.parse_args()
+# Asegúrate de que WandB esté inicializado (si no lo está ya en tu script principal)
+if wandb.run is None:
+    wandb.init(project="Prueba-Clustering-Diplomado")
 
-if args.IdExecution:
-    print(f"IdExecution: {args.IdExecution}")
+# Cargar el dataset Iris como un DataFrame de pandas
+iris = load_iris(as_frame=True)
+data = iris.frame
 
-def load(train_size=.8):
-    """
-    # Load the data
-    """
-      
-    # the data, split between train and test sets
-    train = torchvision.datasets.MNIST(root='./data', train=True, download=True)
-    test = torchvision.datasets.MNIST(root='./data', train=False, download=True)
+# Separar las características (features) del target
+X = data.drop('target', axis=1)
+y = data['target']
 
-    (x_train, y_train), (x_test, y_test) = (train.data, train.targets), (test.data, test.targets)
+# Dividir el dataset en entrenamiento (80%) y el resto (20%)
+X_train, X_temp, y_train, y_temp = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
 
-    # split off a validation set for hyperparameter tuning
-    x_train, x_val = x_train[:int(len(train)*train_size)], x_train[int(len(train)*train_size):]
-    y_train, y_val = y_train[:int(len(train)*train_size)], y_train[int(len(train)*train_size):]
+# Dividir el conjunto restante (temp) en validación (50% de temp = 10% del total) y prueba (50% de temp = 10% del total)
+X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, test_size=0.5, random_state=42, stratify=y_temp)
 
-    training_set = TensorDataset(x_train, y_train)
-    validation_set = TensorDataset(x_val, y_val)
-    test_set = TensorDataset(x_test, y_test)
-    datasets = [training_set, validation_set, test_set]
-    return datasets
+# Convertir los conjuntos a DataFrames de pandas (si aún no lo son)
+train_df = pd.DataFrame(X_train, columns=X.columns)
+train_df['target'] = y_train.values
 
-def load_and_log():
-    # 🚀 start a run, with a type to label it and a project it can call home
-    with wandb.init(
-        project="MLOps-Pycon2025",
-        name=f"Load Raw Data ExecId-{args.IdExecution}", job_type="load-data") as run:
-        
-        datasets = load()  # separate code for loading the datasets
-        names = ["training", "validation", "test"]
+val_df = pd.DataFrame(X_val, columns=X.columns)
+val_df['target'] = y_val.values
 
-        # 🏺 create our Artifact
-        raw_data = wandb.Artifact(
-            "mnist-raw", type="dataset",
-            description="raw MNIST dataset, split into train/val/test",
-            metadata={"source": "torchvision.datasets.MNIST",
-                      "sizes": [len(dataset) for dataset in datasets]})
+test_df = pd.DataFrame(X_test, columns=X.columns)
+test_df['target'] = y_test.values
 
-        for name, data in zip(names, datasets):
-            # 🐣 Store a new file in the artifact, and write something into its contents.
-            with raw_data.new_file(name + ".pt", mode="wb") as file:
-                x, y = data.tensors
-                torch.save((x, y), file)
+# Registrar el tamaño de los conjuntos en WandB
+wandb.log({"data_split/train_size": len(train_df)})
+wandb.log({"data_split/validation_size": len(val_df)})
+wandb.log({"data_split/test_size": len(test_df)})
 
-        # ✍️ Save the artifact to W&B.
-        run.log_artifact(raw_data)
+print("Tamaño del conjunto de entrenamiento:", len(train_df))
+print("Tamaño del conjunto de validación:", len(val_df))
+print("Tamaño del conjunto de prueba:", len(test_df))
 
-# testing
-load_and_log()
+# Opcional: Guardar los conjuntos como artefactos en WandB
+def guardar_como_artefacto(df, nombre, descripcion, tipo="dataset"):
+    artefacto = wandb.Artifact(name=nombre, type=tipo, description=descripcion)
+    tabla = wandb.Table(dataframe=df)
+    artefacto.add(tabla, f"{nombre}.csv")
+    wandb.log_artifact(artefacto)
+
+guardar_como_artefacto(train_df, "iris_train", "Conjunto de entrenamiento del dataset Iris.")
+guardar_como_artefacto(val_df, "iris_validation", "Conjunto de validación del dataset Iris.")
+guardar_como_artefacto(test_df, "iris_test", "Conjunto de prueba del dataset Iris.")
