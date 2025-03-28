@@ -9,14 +9,21 @@ run = wandb.init(project="Prueba-Clustering-Diplomado")
 artifact = run.use_artifact('rgarzona-universidad-nacional-de-colombia/Prueba-Clustering-Diplomado/iris_preprocesado:v0', type='dataset')
 artifact_dir = artifact.download()
 
+
+
 # Construye la ruta al archivo de datos dentro del artefacto descargado
 # Suponiendo que el archivo dentro del artefacto se llama 'preprocessed_data.csv'
 ruta_archivo = f"{artifact_dir}/preprocessed_data.csv.table.json"
 
 # Lee el archivo CSV en un DataFrame de pandas
 try:
+
     table = artifact.get("preprocessed_data.csv")
-    data_preprocesada = table.to_pandas()
+
+    data = table.data
+    columns = table.columns
+
+    data_preprocesada = pd.DataFrame(data, columns=columns)
     print("Datos preprocesados cargados exitosamente en el DataFrame:")
     print(data_preprocesada)
 except FileNotFoundError:
@@ -75,4 +82,3 @@ guardar_como_artefacto(
     "iris_test_preprocesado",
     "Conjunto de prueba preprocesado del dataset Iris."
 )
-
