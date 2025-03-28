@@ -3,7 +3,7 @@ from sklearn.datasets import load_iris
 from sklearn.model_selection import train_test_split
 import wandb
 
-# Asegúrate de que WandB esté inicializado (si no lo está ya en tu script principal)
+# Asegúrate de que WandB esté inicializado (si no lo está ya en tu script principal) a
 if wandb.run is None:
     wandb.init(project="Prueba-Clustering-Diplomado")
 
