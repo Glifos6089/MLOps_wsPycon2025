@@ -21,9 +21,13 @@ else:
 def load_artifact_as_dataframe(run, artifact_name, artifact_type):
     artifact = run.use_artifact(f'{artifact_name}:latest', type=artifact_type)
     artifact_dir = artifact.download()
-    file_path = os.path.join(artifact_dir, f'{artifact_name.replace("_preprocesado", "").replace("iris_", "")}.csv')
+    ruta_archivo = f"{artifact_dir}/{artifact_name}.csv.table.json"
+
     try:
-        df = pd.read_csv(file_path)
+        table = artifact.get("preprocessed_data.csv")
+        data = table.data
+        columns = table.columns
+        df = pd.DataFrame(data, columns=columns)
         if 'target' in df.columns:
             df = df.drop('target', axis=1)
         return df
