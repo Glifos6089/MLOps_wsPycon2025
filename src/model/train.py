@@ -6,7 +6,7 @@ import pandas as pd
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
 import wandb.sklearn
-from sklearn.datasets import load_iris # Importamos para obtener el target names
+from sklearn.datasets import load_iris
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--IdExecution', type=str, help='ID of the execution')
@@ -31,7 +31,7 @@ def load_artifact_as_dataframe(run, artifact_name, artifact_type):
         print(f"Error: No se encontró el archivo en {file_path}")
         return None
 
-def train_clustering_model(config, experiment_id='99'):
+def train_and_log(config, experiment_id='99'):
     with wandb.init(
         project="Prueba-Clustering-Diplomado",
         name=f"Train KMeans ExecId-{args.IdExecution} ExperimentId-{experiment_id}-Clusters-{config.get('n_clusters', 'default')}",
@@ -61,13 +61,10 @@ def train_clustering_model(config, experiment_id='99'):
         except Exception as e:
             print(f"Error al calcular o registrar métricas: {e}")
 
-        # **Registrar la gráfica del Codo usando wandb.sklearn**
+        # Registrar la gráfica del Codo usando wandb.sklearn
         wandb.sklearn.plot_elbow_curve(model, train_data_df)
 
-        # **Registrar la gráfica de la Silueta usando wandb.sklearn**
-        # Para la gráfica de la silueta, necesitamos las etiquetas reales si las tuviéramos para una interpretación,
-        # pero en clustering no supervisado no las tenemos directamente. Podemos usar los nombres de las características
-        # como una alternativa para las etiquetas en la visualización.
+        # Registrar la gráfica de la Silueta usando wandb.sklearn
         iris = load_iris()
         feature_names = iris.feature_names
         wandb.sklearn.plot_silhouette(model, train_data_df, feature_names)
@@ -94,7 +91,7 @@ n_clusters_list = [2, 3, 4, 5, 6]
 # Realizar 5 entrenamientos con diferentes parámetros
 for i, n_clusters in enumerate(n_clusters_list):
     train_config = {"n_clusters": n_clusters}
-    trained_model = train_clustering_model(train_config, experiment_id=i)
+    trained_model = train_and_log(train_config, experiment_id=i)
 
     if trained_model:
         print(f"Entrenamiento {i+1} con {n_clusters} clusters completado.")
