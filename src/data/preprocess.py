@@ -11,7 +11,7 @@ artifact_dir = artifact.download()
 
 # Construye la ruta al archivo de datos dentro del artefacto descargado
 # Suponiendo que el archivo dentro del artefacto se llama 'preprocessed_data.csv'
-ruta_archivo = f"{artifact_dir}/preprocessed_data.csv"
+ruta_archivo = f"{artifact_dir}/preprocessed_data.csv.table.json"
 
 # Lee el archivo CSV en un DataFrame de pandas
 try:
