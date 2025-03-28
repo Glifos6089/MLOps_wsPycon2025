@@ -71,7 +71,7 @@ def train_and_log(config, experiment_id='99'):
         # Registrar la gráfica de la Silueta usando wandb.sklearn
         iris = load_iris()
         feature_names = iris.feature_names
-        wandb.sklearn.plot_silhouette(model, train_data_df, feature_names)
+        wandb.sklearn.plot_silhouette(model, train_data_df, model.labels_)
 
         # Guardar el modelo entrenado como un nuevo artefacto
         model_name = f"kmeans_model_clusters_{n_clusters}"
