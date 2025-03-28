@@ -8,7 +8,7 @@ run = wandb.init(project="Prueba-Clustering-Diplomado")
 
 artifact = run.use_artifact('rgarzona-universidad-nacional-de-colombia/Prueba-Clustering-Diplomado/iris_preprocesado:v0', type='dataset')
 artifact_dir = artifact.download()
-data_preprocesada = pd.read_csv(ruta_archivo)
+data_preprocesada = pd.read_csv(artifact_dir)
 
 wandb.init(project="Prueba-Clustering-Diplomado")
 
