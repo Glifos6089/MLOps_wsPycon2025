@@ -11,7 +11,7 @@ nombre_artefacto_preprocesado = "iris_preprocesado"
 tipo_artefacto_preprocesado = "dataset"
 version_artefacto = "latest"
 nombre_completo_artefacto = f"{nombre_artefacto_preprocesado}:{version_artefacto}"
-artefacto = wandb.use_artifact(nombre_completo_artefacto, type=tipo_artefacto)
+artefacto = wandb.use_artifact(nombre_completo_artefacto, type=tipo_artefacto_preprocesado)
 artefacto_descargado = artefacto.download()
 ruta_archivo = f"{artefacto_descargado}/preprocessed_data.csv"
 data_preprocesada = pd.read_csv(ruta_archivo)
