@@ -24,7 +24,7 @@ def load_artifact_as_dataframe(run, artifact_name, artifact_type):
     ruta_archivo = f"{artifact_dir}/{artifact_name}.csv.table.json"
 
     try:
-        table = artifact.get("preprocessed_data.csv")
+        table = artifact.get(f"{artifact_name}.csv")
         data = table.data
         columns = table.columns
         df = pd.DataFrame(data, columns=columns)
