@@ -1,68 +1,58 @@
-import torch
-import torchvision
-from torch.utils.data import TensorDataset
-
-#testing
+import pandas as pd
+from sklearn.datasets import load_iris
+from sklearn.preprocessing import StandardScaler
+import wandb
 import os
 import argparse
-import wandb
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--IdExecution', type=str, help='ID of the execution')
-args = parser.parse_args()
+# Inicializar WandB
+wandb.init(project="Prueba-Clustering-Diplomado")
 
-if args.IdExecution:
-    print(f"IdExecution: {args.IdExecution}")
-else:
-    args.IdExecution = "testing console"
+# Cargar el dataset Iris como un DataFrame de pandas
+iris = load_iris(as_frame=True)
+data = iris.frame
+target = iris.target
 
-def preprocess(dataset, normalize=True, expand_dims=True):
-    """
-    ## Prepare the data
-    """
-    x, y = dataset.tensors
+# Separar las características (features) del target
+X = data.drop('target', axis=1)
+y = data['target']
 
-    if normalize:
-        # Scale images to the [0, 1] range
-        x = x.type(torch.float32) / 255
+# Inicializar el escalador estándar
+scaler = StandardScaler()
 
-    if expand_dims:
-        # Make sure images have shape (1, 28, 28)
-        x = torch.unsqueeze(x, 1)
-    
-    return TensorDataset(x, y)
+# Ajustar el escalador a los datos y transformarlos
+X_scaled = scaler.fit_transform(X)
 
-def preprocess_and_log(steps):
+# Convertir el array NumPy escalado de vuelta a un DataFrame de pandas (opcional, pero útil para inspección)
+X_scaled_df = pd.DataFrame(X_scaled, columns=X.columns)
 
-    with wandb.init(project="MLOps-Pycon2025",name=f"Preprocess Data ExecId-{args.IdExecution}", job_type="preprocess-data") as run:    
-        processed_data = wandb.Artifact(
-            "mnist-preprocess", type="dataset",
-            description="Preprocessed MNIST dataset",
-            metadata=steps)
-         
-        # ✔️ declare which artifact we'll be using
-        raw_data_artifact = run.use_artifact('mnist-raw:latest')
+# Registrar los parámetros de preprocesamiento en WandB
+wandb.log({"preprocesamiento/scaler": "StandardScaler"})
+wandb.log({"preprocesamiento/n_muestras_original": X.shape[0]})
+wandb.log({"preprocesamiento/n_caracteristicas_original": X.shape[1]})
 
-        # 📥 if need be, download the artifact
-        raw_dataset = raw_data_artifact.download(root="./data/artifacts/")
-        
-        for split in ["training", "validation", "test"]:
-            raw_split = read(raw_dataset, split)
-            processed_dataset = preprocess(raw_split, **steps)
+print("Datos originales:")
+print(X.head())
+print("\nDatos preprocesados (escalados):")
+print(X_scaled_df.head())
 
-            with processed_data.new_file(split + ".pt", mode="wb") as file:
-                x, y = processed_dataset.tensors
-                torch.save((x, y), file)
+# Crear un artefacto de WandB para los datos preprocesados
+nombre_artefacto = "iris_preprocesado"
+descripcion_artefacto = "Datos del dataset Iris preprocesados con StandardScaler."
+tipo_artefacto = "dataset"
 
-        run.log_artifact(processed_data)
+artefacto_preprocesado = wandb.Artifact(
+    name=nombre_artefacto,
+    type=tipo_artefacto,
+    description=descripcion_artefacto
+)
 
-def read(data_dir, split):
-    filename = split + ".pt"
-    x, y = torch.load(os.path.join(data_dir, filename))
+# Crear una tabla de WandB a partir del DataFrame preprocesado
+tabla_preprocesada = wandb.Table(dataframe=X_scaled_df)
 
-    return TensorDataset(x, y)
+# Agregar la tabla al artefacto
+artefacto_preprocesado.add(tabla_preprocesada, "preprocessed_data.csv") # El nombre del archivo dentro del artefacto
 
-steps = {"normalize": True,
-         "expand_dims": False}
+# Guardar el artefacto en WandB
+wandb.log_artifact(artefacto_preprocesado)
 
-preprocess_and_log(steps)
