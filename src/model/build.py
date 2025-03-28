@@ -1,11 +1,9 @@
-import torch
-
-# Import the model class from the main file
-from src.Classifier import Classifier
-
+import pickle
 import os
 import argparse
 import wandb
+from sklearn.cluster import KMeans
+from sklearn.datasets import load_iris
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--IdExecution', type=str, help='ID of the execution')
@@ -21,14 +19,10 @@ if not os.path.exists("./model"):
     # If it doesn't exist, create it
     os.makedirs("./model")
 
-# Data parameters testing
-num_classes = 10
-input_shape = 784
-
-def build_model_and_log(config, model, model_name="MLP", model_description="Simple MLP"):
-    with wandb.init(project="MLOps-Pycon2025", 
-        name=f"initialize Model ExecId-{args.IdExecution}", 
-        job_type="initialize-model", config=config) as run:
+def save_model_as_artifact(config, model, model_name="KMeans", model_description="Simple K-Means Clustering Model"):
+    with wandb.init(project="Prueba-Clustering-Diplomado",
+                    name=f"save Model ExecId-{args.IdExecution}",
+                    job_type="save-model", config=config) as run:
         config = wandb.config
 
         model_artifact = wandb.Artifact(
@@ -36,10 +30,13 @@ def build_model_and_log(config, model, model_name="MLP", model_description="Simp
             description=model_description,
             metadata=dict(config))
 
-        name_artifact_model = f"initialized_model_{model_name}.pth"
+        name_artifact_model = f"trained_model_{model_name}.pkl"
 
-        torch.save(model.state_dict(), f"./model/{name_artifact_model}")
-        # ➕ another way to add a file to an Artifact
+        # Guardar el modelo usando pickle
+        with open(f"./model/{name_artifact_model}", 'wb') as file:
+            pickle.dump(model, file)
+
+        # Añadir el archivo del modelo al artefacto
         model_artifact.add_file(f"./model/{name_artifact_model}")
 
         wandb.save(name_artifact_model)
@@ -47,13 +44,14 @@ def build_model_and_log(config, model, model_name="MLP", model_description="Simp
         run.log_artifact(model_artifact)
 
 
-# MLP
-# Testing config LOL
-model_config = {"input_shape":input_shape,
-                "hidden_layer_1": 32,
-                "hidden_layer_2": 64,
-                "num_classes":num_classes}
+# Configuración del modelo K-Means
+n_clusters = 3  # Ejemplo: definimos 3 clusters
+kmeans_config = {"n_clusters": n_clusters,
+                 "random_state": 42}
 
-model = Classifier(**model_config)
+# Crear una instancia del modelo K-Means
+kmeans_model = KMeans(**kmeans_config)
 
-build_model_and_log(model_config, model, "linear","Simple Linear Classifier")
+# Guardar el modelo entrenado como un artefacto
+save_model_as_artifact(kmeans_config, kmeans_model, "kmeans_model", "K-Means clustering model trained on Iris dataset")
+
