@@ -1,14 +1,12 @@
-import torch
-import torch.nn.functional as F
-from torch import nn 
-from torch.utils.data import TensorDataset
-
-# Import the model class from the main file
-from src.Classifier import Classifier
-
+import pickle
 import os
 import argparse
 import wandb
+import pandas as pd
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score
+import wandb.sklearn
+from sklearn.datasets import load_iris # Importamos para obtener el target names
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--IdExecution', type=str, help='ID of the execution')
@@ -19,217 +17,87 @@ if args.IdExecution:
 else:
     args.IdExecution = "testing console"
 
-# Device configuration
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-print("Device: ", device)
+# Función para cargar un artefacto de WandB como DataFrame
+def load_artifact_as_dataframe(run, artifact_name, artifact_type):
+    artifact = run.use_artifact(f'{artifact_name}:latest', type=artifact_type)
+    artifact_dir = artifact.download()
+    file_path = os.path.join(artifact_dir, f'{artifact_name.replace("_preprocesado", "").replace("iris_", "")}.csv')
+    try:
+        df = pd.read_csv(file_path)
+        if 'target' in df.columns:
+            df = df.drop('target', axis=1)
+        return df
+    except FileNotFoundError:
+        print(f"Error: No se encontró el archivo en {file_path}")
+        return None
 
-
-def read(data_dir, split):
-    """
-    Read data from a directory and return a TensorDataset object.
-
-    Args:
-    - data_dir (str): The directory where the data is stored.
-    - split (str): The name of the split to read (e.g. "train", "valid", "test").
-
-    Returns:
-    - dataset (TensorDataset): A TensorDataset object containing the data.
-    """
-    filename = split + ".pt"
-    x, y = torch.load(os.path.join(data_dir, filename))
-
-    return TensorDataset(x, y)
-
-
-
-def train(model, train_loader, valid_loader, config):
-    optimizer = getattr(torch.optim, config.optimizer)(model.parameters())
-    model.train()
-    example_ct = 0
-    for epoch in range(config.epochs):
-        for batch_idx, (data, target) in enumerate(train_loader):
-            data, target = data.to(device), target.to(device)
-            data = data.view(data.shape[0],-1)
-            optimizer.zero_grad()
-            output = model(data)
-            loss = F.cross_entropy(output, target)
-            loss.backward()
-            optimizer.step()
-
-            example_ct += len(data)
-
-            if batch_idx % config.batch_log_interval == 0:
-                print('Train Epoch: {} [{}/{} ({:.0%})]\tLoss: {:.6f}'.format(
-                    epoch, batch_idx * len(data), len(train_loader.dataset),
-                    batch_idx / len(train_loader), loss.item()))
-                
-                train_log(loss, example_ct, epoch)
-
-        # evaluate the model on the validation set at each epoch
-        loss, accuracy = test(model, valid_loader)  
-        test_log(loss, accuracy, example_ct, epoch)
-
-    
-def test(model, test_loader):
-    model.eval()
-    test_loss = 0
-    correct = 0
-    with torch.no_grad():
-        for data, target in test_loader:
-            data, target = data.to(device), target.to(device)
-            data = data.view(data.shape[0],-1)
-            output = model(data)
-            test_loss += F.cross_entropy(output, target, reduction='sum')  # sum up batch loss
-            pred = output.argmax(dim=1, keepdim=True)  # get the index of the max log-probability
-            correct += pred.eq(target.view_as(pred)).sum()
-
-    test_loss /= len(test_loader.dataset)
-
-    accuracy = 100. * correct / len(test_loader.dataset)
-    
-    return test_loss, accuracy
-
-
-def train_log(loss, example_ct, epoch):
-    loss = float(loss)
-    # where the magic happens
-    wandb.log({"epoch": epoch, "train/loss": loss}, step=example_ct)
-    print(f"Loss after " + str(example_ct).zfill(5) + f" examples: {loss:.3f}")
-    
-
-def test_log(loss, accuracy, example_ct, epoch):
-    loss = float(loss)
-    accuracy = float(accuracy)
-    # where the magic happens
-    wandb.log({"epoch": epoch, "validation/loss": loss, "validation/accuracy": accuracy}, step=example_ct)
-    print(f"Loss/accuracy after " + str(example_ct).zfill(5) + f" examples: {loss:.3f}/{accuracy:.3f}")
-
-def evaluate(model, test_loader):
-    """
-    ## Evaluate the trained model
-    """
-
-    loss, accuracy = test(model, test_loader)
-    highest_losses, hardest_examples, true_labels, predictions = get_hardest_k_examples(model, test_loader.dataset)
-
-    return loss, accuracy, highest_losses, hardest_examples, true_labels, predictions
-
-def get_hardest_k_examples(model, testing_set, k=32):
-    model.eval()
-
-    loader = DataLoader(testing_set, 1, shuffle=False)
-
-    # get the losses and predictions for each item in the dataset
-    losses = None
-    predictions = None
-    with torch.no_grad():
-        for data, target in loader:
-            data, target = data.to(device), target.to(device)
-            data = data.view(data.shape[0],-1)
-            output = model(data)
-            loss = F.cross_entropy(output, target)
-            pred = output.argmax(dim=1, keepdim=True)
-            
-            if losses is None:
-                losses = loss.view((1, 1))
-                predictions = pred
-            else:
-                losses = torch.cat((losses, loss.view((1, 1))), 0)
-                predictions = torch.cat((predictions, pred), 0)
-
-    argsort_loss = torch.argsort(losses, dim=0).cpu()
-
-    highest_k_losses = losses[argsort_loss[-k:]]
-    hardest_k_examples = testing_set[argsort_loss[-k:]][0]
-    true_labels = testing_set[argsort_loss[-k:]][1]
-    predicted_labels = predictions[argsort_loss[-k:]]
-
-    return highest_k_losses, hardest_k_examples, true_labels, predicted_labels
-
-from torch.utils.data import DataLoader
-
-def train_and_log(config,experiment_id='99'):
+def train_clustering_model(config, experiment_id='99'):
     with wandb.init(
-        project="MLOps-Pycon2025", 
-        name=f"Train Model ExecId-{args.IdExecution} ExperimentId-{experiment_id}", 
+        project="Prueba-Clustering-Diplomado",
+        name=f"Train KMeans ExecId-{args.IdExecution} ExperimentId-{experiment_id}-Clusters-{config.get('n_clusters', 'default')}",
         job_type="train-model", config=config) as run:
         config = wandb.config
-        data = run.use_artifact('mnist-preprocess:latest')
-        data_dir = data.download()
 
-        training_dataset =  read(data_dir, "training")
-        validation_dataset = read(data_dir, "validation")
+        # Cargar los datos de entrenamiento preprocesados desde el artefacto
+        train_data_df = load_artifact_as_dataframe(run, 'iris_train_preprocesado', 'dataset')
+        if train_data_df is None:
+            print("Error al cargar los datos de entrenamiento. Saliendo.")
+            return None
 
-        train_loader = DataLoader(training_dataset, batch_size=config.batch_size)
-        validation_loader = DataLoader(validation_dataset, batch_size=config.batch_size)
-        
-        model_artifact = run.use_artifact("linear:latest")
-        model_dir = model_artifact.download()
-        model_path = os.path.join(model_dir, "initialized_model_linear.pth")
-        model_config = model_artifact.metadata
-        config.update(model_config)
+        n_clusters = config.n_clusters
 
-        model = Classifier(**model_config)
-        model.load_state_dict(torch.load(model_path))
-        model = model.to(device)
- 
-        train(model, train_loader, validation_loader, config)
+        # Crear una instancia del modelo K-Means con la configuración actual
+        model = KMeans(n_clusters=n_clusters, random_state=42, n_init='auto')
 
-        model_artifact = wandb.Artifact(
-            "trained-model", type="model",
-            description="Trained NN model",
-            metadata=dict(model_config))
+        # "Entrenar" el modelo
+        model.fit(train_data_df)
 
-        torch.save(model.state_dict(), "trained_model.pth")
-        model_artifact.add_file("trained_model.pth")
-        wandb.save("trained_model.pth")
+        # Registrar métricas relevantes (Silhouette Score)
+        try:
+            labels = model.predict(train_data_df)
+            silhouette = silhouette_score(train_data_df, labels)
+            wandb.log({"train/silhouette_score": silhouette})
+            print(f"Silhouette Score (n_clusters={n_clusters}): {silhouette:.4f}")
+        except Exception as e:
+            print(f"Error al calcular o registrar métricas: {e}")
 
-        run.log_artifact(model_artifact)
+        # **Registrar la gráfica del Codo usando wandb.sklearn**
+        wandb.sklearn.plot_elbow_curve(model, train_data_df)
 
-    return model
+        # **Registrar la gráfica de la Silueta usando wandb.sklearn**
+        # Para la gráfica de la silueta, necesitamos las etiquetas reales si las tuviéramos para una interpretación,
+        # pero en clustering no supervisado no las tenemos directamente. Podemos usar los nombres de las características
+        # como una alternativa para las etiquetas en la visualización.
+        iris = load_iris()
+        feature_names = iris.feature_names
+        wandb.sklearn.plot_silhouette(model, train_data_df, feature_names)
 
-    
-def evaluate_and_log(experiment_id='99',config=None,):
-    
-    with wandb.init(project="MLOps-Pycon2025", name=f"Eval Model ExecId-{args.IdExecution} ExperimentId-{experiment_id}", job_type="eval-model", config=config) as run:
-        data = run.use_artifact('mnist-preprocess:latest')
-        data_dir = data.download()
-        testing_set = read(data_dir, "test")
+        # Guardar el modelo entrenado como un nuevo artefacto
+        model_name = f"kmeans_model_clusters_{n_clusters}"
+        trained_model_artifact = wandb.Artifact(
+            model_name, type="model",
+            description=f"K-Means clustering model with {n_clusters} clusters",
+            metadata=dict(config))
 
-        test_loader = torch.utils.data.DataLoader(testing_set, batch_size=128, shuffle=False)
+        trained_model_path = f"trained_{model_name}.pkl"
+        with open(trained_model_path, 'wb') as file:
+            pickle.dump(model, file)
+        trained_model_artifact.add_file(trained_model_path)
+        wandb.save(trained_model_path)
+        run.log_artifact(trained_model_artifact)
 
-        model_artifact = run.use_artifact("trained-model:latest")
-        model_dir = model_artifact.download()
-        model_path = os.path.join(model_dir, "trained_model.pth")
-        model_config = model_artifact.metadata
+        return model
 
-        model = Classifier(**model_config)
-        model.load_state_dict(torch.load(model_path))
-        model.to(device)
+# Lista de diferentes valores para el número de clusters
+n_clusters_list = [2, 3, 4, 5, 6]
 
-        loss, accuracy, highest_losses, hardest_examples, true_labels, preds = evaluate(model, test_loader)
+# Realizar 5 entrenamientos con diferentes parámetros
+for i, n_clusters in enumerate(n_clusters_list):
+    train_config = {"n_clusters": n_clusters}
+    trained_model = train_clustering_model(train_config, experiment_id=i)
 
-        run.summary.update({"loss": loss, "accuracy": accuracy})
+    if trained_model:
+        print(f"Entrenamiento {i+1} con {n_clusters} clusters completado.")
 
-        wandb.log({"high-loss-examples":
-            [wandb.Image(hard_example, caption=str(int(pred)) + "," +  str(int(label)))
-             for hard_example, pred, label in zip(hardest_examples, preds, true_labels)]})
-
-epochs = [50,100,200]
-for id,epoch in enumerate(epochs):
-    train_config = {"batch_size": 128,
-                "epochs": epoch,
-                "batch_log_interval": 25,
-                "optimizer": "Adam"}
-    model = train_and_log(train_config,id)
-    evaluate_and_log(id)        
-
-"""    
-train_config = {"batch_size": 128,
-                "epochs": 5,
-                "batch_log_interval": 25,
-                "optimizer": "Adam"}
-
-model = train_and_log(train_config)
-evaluate_and_log()
-"""
+# No olvides finalizar la ejecución de WandB si no vas a hacer más operaciones
+wandb.finish()
