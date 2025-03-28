@@ -3,7 +3,7 @@ from sklearn.datasets import load_iris
 from sklearn.model_selection import train_test_split
 import wandb
 
-# Inicializar WandB (asegúrate de que el nombre del proyecto coincida)
+# Inicializar WandB (asegúrate de que el nombre del proyecto coincida) lol
 wandb.init(project="Prueba-Clustering-Diplomado")
 
 # Nombre y tipo del artefacto que queremos cargar
